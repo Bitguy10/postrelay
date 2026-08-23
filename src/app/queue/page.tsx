@@ -109,9 +109,7 @@ export default function QueuePage() {
             <Countdown
               target={nextFire.fireAt}
               className="block text-gold"
-              pastLabel={
-                nextFire.status === "in_progress" ? "firing…" : "waiting for cron…"
-              }
+              pastLabel={nextFire.status === "in_progress" ? "firing…" : "posting"}
             />
           ) : (
             <span className="font-mono text-xs text-muted">—</span>
@@ -324,9 +322,7 @@ export default function QueuePage() {
                       <Countdown
                         target={p.fireAt}
                         className="text-gold/80"
-                        pastLabel={
-                          p.status === "in_progress" ? "firing…" : "waiting for cron…"
-                        }
+                        pastLabel={p.status === "in_progress" ? "firing…" : "posting"}
                       />
                       {p.attempts > 0 && (
                         <span className="text-gold"> · retry {p.attempts}/3</span>

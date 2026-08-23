@@ -144,7 +144,7 @@ export default function PreviewPage() {
               <Countdown
                 target={post.fireAt}
                 className="text-gold"
-                pastLabel={post.status === "in_progress" ? "firing…" : "waiting for cron…"}
+                pastLabel={post.status === "in_progress" ? "firing…" : "posting"}
               />
             </div>
             {post.attempts > 0 && (

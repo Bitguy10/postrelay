@@ -70,10 +70,17 @@ export default function PreviewFrame({
         <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted">
           Prmpted.com preview
         </span>
-        <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-gold">
-          <span className="inline-block h-1.5 w-1.5 rounded-full bg-gold animate-pulse-dot" />
-          Not yet live
-        </span>
+        {post.status === "posted" ? (
+          <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-good">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-good" />
+            Live
+          </span>
+        ) : (
+          <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-gold">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-gold animate-pulse-dot" />
+            Not yet live
+          </span>
+        )}
       </div>
 
       <div className="preview-frame p-4">
