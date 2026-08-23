@@ -140,7 +140,12 @@ export default function PreviewPage() {
             <div className="flex items-center justify-center gap-2 font-mono text-[11px] uppercase tracking-wider text-muted">
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-gold animate-pulse-dot" />
               scheduled · {fmtStamp(post.fireAt, zone)}
-              {abbr ? ` ${abbr}` : ""} · <Countdown target={post.fireAt} className="text-gold" />
+              {abbr ? ` ${abbr}` : ""} ·{" "}
+              <Countdown
+                target={post.fireAt}
+                className="text-gold"
+                pastLabel={post.status === "in_progress" ? "firing…" : "waiting for cron…"}
+              />
             </div>
             {post.attempts > 0 && (
               <p className="mt-2 text-center font-mono text-[10px] text-gold">

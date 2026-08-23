@@ -23,7 +23,19 @@ const K = {
   batches: "cadence:batches", // hash: batchId -> Batch JSON
   activity: "cadence:activity", // list: ActivityEntry JSON (newest first)
   refs: "cadence:refs", // string: Refs JSON
+  heartbeat: "cadence:heartbeat", // string: ISO — last successful cron tick
 } as const;
+
+// ---- heartbeat ----
+
+/** Written on every authenticated cron tick — the UI warns when it goes stale. */
+export async function touchHeartbeat(): Promise<void> {
+  await kvSet(K.heartbeat, new Date().toISOString());
+}
+
+export async function getHeartbeat(): Promise<string | null> {
+  return kvGet(K.heartbeat);
+}
 
 // ---- session ----
 

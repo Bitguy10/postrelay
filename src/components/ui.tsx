@@ -100,18 +100,23 @@ export function TypeTag({ type }: { type: string }) {
 export function Countdown({
   target,
   className = "",
+  pastLabel = "firing…",
 }: {
   target: string;
   className?: string;
+  /** Shown once the time has passed — "firing…" when in the worker's hands,
+   *  "waiting for cron…" when the heartbeat hasn't picked it up yet. */
+  pastLabel?: string;
 }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
+  const past = new Date(target).getTime() - now <= 0;
   return (
     <span className={`font-mono text-xs ${className}`}>
-      {countdownText(target, now)}
+      {past ? pastLabel : countdownText(target, now)}
     </span>
   );
 }

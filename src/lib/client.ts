@@ -64,6 +64,10 @@ export interface SessionStatus {
   tzAbbr: string | null;
   /** True when a stored/provided zone was invalid and we fell back to UTC. */
   tzFallback: boolean;
+  /** ISO of the last authenticated cron tick, if any. */
+  lastTickAt: string | null;
+  /** True when a heartbeat exists but is >10 min old — cron isn't reaching us. */
+  heartbeatStale: boolean;
   config: { redis: boolean; encryptionKey: boolean; cronSecret: boolean };
 }
 

@@ -106,7 +106,13 @@ export default function QueuePage() {
         </Stat>
         <Stat label="next fire" pulse={Boolean(nextFire)}>
           {nextFire ? (
-            <Countdown target={nextFire.fireAt} className="block text-gold" />
+            <Countdown
+              target={nextFire.fireAt}
+              className="block text-gold"
+              pastLabel={
+                nextFire.status === "in_progress" ? "firing…" : "waiting for cron…"
+              }
+            />
           ) : (
             <span className="font-mono text-xs text-muted">—</span>
           )}
@@ -314,7 +320,14 @@ export default function QueuePage() {
                       {p.title || `(${p.type} post)`}
                     </Link>
                     <p className="font-mono text-[10px] text-muted">
-                      {fmtStamp(p.fireAt, zone)} · <Countdown target={p.fireAt} className="text-gold/80" />
+                      {fmtStamp(p.fireAt, zone)} ·{" "}
+                      <Countdown
+                        target={p.fireAt}
+                        className="text-gold/80"
+                        pastLabel={
+                          p.status === "in_progress" ? "firing…" : "waiting for cron…"
+                        }
+                      />
                       {p.attempts > 0 && (
                         <span className="text-gold"> · retry {p.attempts}/3</span>
                       )}

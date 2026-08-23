@@ -1,17 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
-import { clearSession, getSessionRecord } from "@/lib/data";
+import {
+  clearSession,
+  getHeartbeat,
+  getSessionRecord,
+} from "@/lib/data";
 import { changeTimezone, connectSession } from "@/lib/session";
 import { parsePastedSession } from "@/lib/validate";
 import { cronSecret, encryptionKeySecret, redisConfigured } from "@/lib/env";
-import { isValidZone, zoneAbbr } from "@/lib/time";
+import { isValidZone, zoneAbbr, MIN } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
+
+// A heartbeat older than this means cron-job.org has stopped reaching us
+// (bad URL/secret, paused job) — surfaced as a visible warning.
+const STALE_HEARTBEAT_MS = 10 * MIN;
 
 export async function GET() {
   const rec = await getSessionRecord();
   const stored = rec?.timezone;
   const valid = isValidZone(stored);
   const timezone = rec ? (valid ? stored! : "UTC") : null;
+  const heartbeat = await getHeartbeat();
+  const lastTickMs = heartbeat ? new Date(heartbeat).getTime() : null;
   return NextResponse.json(
     {
       connected: Boolean(rec),
@@ -23,6 +33,10 @@ export async function GET() {
       timezone,
       tzAbbr: timezone ? zoneAbbr(timezone) : null,
       tzFallback: rec ? rec.tzFallback || !valid : false,
+      lastTickAt: heartbeat,
+      // stale only counts once a heartbeat exists (cron worked before)
+      heartbeatStale:
+        lastTickMs !== null && Date.now() - lastTickMs > STALE_HEARTBEAT_MS,
       config: {
         redis: redisConfigured(),
         encryptionKey: Boolean(encryptionKeySecret()),

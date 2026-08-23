@@ -143,6 +143,30 @@ export default function AppShell({
         </div>
       )}
 
+      {session?.connected && session.heartbeatStale && (
+        <div className="mx-auto mt-4 w-full max-w-[480px] px-4 min-[900px]:max-w-[900px]">
+          <div className="card border-gold/40 bg-gold/[0.07] px-4 py-3">
+            <div className="text-sm">
+              <span className="font-semibold text-gold">Cron heartbeat lost.</span>{" "}
+              <span className="text-muted">
+                cron-job.org hasn&apos;t reached Cadence in 10+ minutes —
+                scheduled posts are holding. Check that the cron job&apos;s URL
+                and secret match Cadence&apos;s{" "}
+                <code className="rounded bg-ink px-1 font-mono text-[10px] text-gold">
+                  CRON_SECRET
+                </code>
+                .
+              </span>
+            </div>
+            {session.lastTickAt && (
+              <p className="mt-1 font-mono text-[10px] text-muted/70">
+                last tick: {new Date(session.lastTickAt).toLocaleString()}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       <main
         className={`mx-auto w-full flex-1 px-4 pb-24 pt-6 ${
           wide ? "max-w-[480px] min-[900px]:max-w-[900px]" : "max-w-[480px]"

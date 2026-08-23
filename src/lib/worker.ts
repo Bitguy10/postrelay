@@ -9,6 +9,7 @@ import {
   getSessionRecord,
   getPost,
   savePost,
+  touchHeartbeat,
 } from "./data";
 import { getFreshAccessToken, setNeedsReconnect, syncRefs } from "./session";
 import { submitPost } from "./submit";
@@ -118,6 +119,13 @@ async function failAttempt(
 
 export async function runTick(): Promise<TickSummary> {
   const now = Date.now();
+  // Heartbeat first: even a no-op tick proves cron-job.org is reaching us.
+  // If this timestamp ever goes stale, the UI raises the alarm.
+  try {
+    await touchHeartbeat();
+  } catch {
+    // never block posting on the heartbeat write
+  }
   const summary: TickSummary = {
     ranAt: new Date().toISOString(),
     due: 0,
