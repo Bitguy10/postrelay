@@ -106,7 +106,7 @@ export default function LandingPage() {
           },
           {
             t: "Drip queues",
-            d: "Drop posts into a batch and Cadence auto-spaces them — every 2 days at 9:00am, or whatever cadence you set.",
+            d: "Drop posts into a batch and PostRelay auto-spaces them — every 2 days at 9:00am, or whatever cadence you set.",
           },
           {
             t: "Nothing fails silently",
@@ -129,7 +129,7 @@ export default function LandingPage() {
             "Connect — paste the prompted-auth session from your browser's Local Storage. It's verified live, then encrypted at rest and never shown again.",
             "Compose — every field Prompted's own form has, with live-synced categories, tools, and communities.",
             "Schedule — one exact time, or a drip queue that spaces a whole batch for you.",
-            "Fire — cron-job.org pings Cadence every 5 minutes; due posts go out via Prompted's own API, at the exact minute scheduled.",
+            "Fire — cron-job.org pings PostRelay every 5 minutes; due posts go out via Prompted's own API, at the exact minute scheduled.",
           ].map((s, i) => (
             <li key={i} className="flex gap-3 px-4 py-3">
               <span className="font-mono text-xs text-gold">

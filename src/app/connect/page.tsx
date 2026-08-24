@@ -159,7 +159,7 @@ export default function ConnectPage() {
         <span className="italic text-gold">that&apos;s the whole login.</span>
       </h1>
       <p className="mt-2 text-sm leading-relaxed text-muted">
-        Cadence has no accounts of its own. You paste the session Prompted
+        PostRelay has no accounts of its own. You paste the session Prompted
         already gave your browser; it&apos;s verified live, encrypted at rest,
         and never displayed again.
       </p>
@@ -311,7 +311,7 @@ export default function ConnectPage() {
               </div>
             </div>
             <p className="mt-3 text-xs leading-relaxed text-muted">
-              Cadence will refresh this token automatically before each post.
+              PostRelay will refresh this token automatically before each post.
               If it ever goes stale, you&apos;ll see one reconnect prompt —
               nothing fails silently.
             </p>

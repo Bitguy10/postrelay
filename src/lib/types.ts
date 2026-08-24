@@ -1,4 +1,4 @@
-// Shared domain types for Cadence.
+// Shared domain types for PostRelay.
 
 export type PostType = "build" | "discussion" | "video" | "question";
 

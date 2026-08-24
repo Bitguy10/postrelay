@@ -11,7 +11,7 @@ export interface RailItem {
 }
 
 /**
- * Cadence's signature visual: a vertical dotted timeline. The next post to
+ * PostRelay's signature visual: a vertical dotted timeline. The next post to
  * fire is a pulsing gold dot; everything queued after fades progressively.
  * Times render in the connected user's timezone.
  */

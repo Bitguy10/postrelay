@@ -58,7 +58,7 @@ export default function AppShell({
           <Link href="/" className="flex items-center gap-2.5">
             <Logo />
             <span className="font-display text-xl tracking-tight text-cream">
-              Cadence
+              PostRelay
             </span>
           </Link>
           <Link
@@ -153,7 +153,7 @@ export default function AppShell({
 
       <footer className="mx-auto w-full max-w-[480px] px-4 pb-8 text-center min-[900px]:max-w-[900px]">
         <p className="font-mono text-[10px] uppercase tracking-wider text-muted/60">
-          Cadence · free scheduling for prmpted.com
+          PostRelay · free scheduling for prmpted.com
         </p>
         <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-muted/40">
           Vercel + Upstash + cron-job.org · no always-on backend

@@ -10,7 +10,7 @@ import { countdownText } from "@/lib/time";
 export function Logo({ size = 26 }: { size?: number }) {
   // Three ascending dots on a diagonal: rhythm + a queue building momentum.
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" aria-label="Cadence logo">
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-label="PostRelay logo">
       <circle cx="5" cy="19" r="2" fill="#8a6524" />
       <circle cx="11.5" cy="12" r="3" fill="#c98f31" />
       <circle cx="18.5" cy="5" r="4.4" fill="#F0A83A" />

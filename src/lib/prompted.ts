@@ -17,7 +17,7 @@ function restHeaders(token: string): Record<string, string> {
     "Content-Type": "application/json",
     Accept: "application/json",
     "accept-profile": "public",
-    "x-client-info": "cadence/1.0",
+    "x-client-info": "postrelay/1.0",
   };
 }
 

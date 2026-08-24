@@ -16,7 +16,8 @@ import {
   kvSet,
 } from "./store";
 
-// All Cadence data lives in Upstash Redis under these keys.
+// All PostRelay data lives in Upstash Redis under these keys.
+// (The "cadence:" key prefix is kept from the previous name so existing data survives.)
 const K = {
   session: "cadence:session",
   posts: "cadence:posts", // hash: postId -> Post JSON

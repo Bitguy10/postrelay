@@ -1,4 +1,4 @@
-# Cadence
+# PostRelay
 
 Free scheduling & auto-posting for [Prompted](https://prmpted.com). No accounts,
 no always-on backend: Vercel serverless functions + Upstash Redis (free tiers)
@@ -14,7 +14,7 @@ reconnect prompt when the session goes stale.
 
 ## Per-user timezones
 
-Every time in Cadence belongs to the connected user's own clock:
+Every time in PostRelay belongs to the connected user's own clock:
 
 - The zone is auto-detected at connect (`Intl.DateTimeFormat().resolvedOptions().timeZone`)
   and stored as an **IANA identifier** (`Africa/Lagos`, `America/New_York`,
@@ -96,7 +96,7 @@ cron-job.org ── every 5 min ──> /api/cron/tick (secret-protected)
 
 ### Post submission (verified against Prompted's frontend bundle)
 
-Cadence replicates the exact REST pattern Prompted's own web app uses:
+PostRelay replicates the exact REST pattern Prompted's own web app uses:
 
 - single `POST /rest/v1/posts` insert with inline fields (`title`,
   `description`, `prompt` + `prompt_steps[{step_number,prompt_text}]`,

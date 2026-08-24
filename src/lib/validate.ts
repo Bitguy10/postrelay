@@ -61,7 +61,7 @@ export function parsePastedSession(
     return { ok: false, error: "Missing access_token" };
   }
   if (typeof s.refresh_token !== "string" || !s.refresh_token) {
-    return { ok: false, error: "Missing refresh_token — Cadence needs it to auto-refresh your session" };
+    return { ok: false, error: "Missing refresh_token — PostRelay needs it to auto-refresh your session" };
   }
   if (!s.user?.id) return { ok: false, error: "Missing user object" };
   return { ok: true, session: s };

@@ -3,7 +3,7 @@
 import { MediaRef, Post, Refs } from "@/lib/types";
 
 // Preview-as-Prompted: deliberately styled like a Prompted post card inside a
-// dashed frame — visually distinct from Cadence's own chrome, with an explicit
+// dashed frame — visually distinct from PostRelay's own chrome, with an explicit
 // "not yet live" state. Inferred rendering of what prmpted.com will show.
 
 function MediaGrid({ media }: { media: MediaRef[] }) {

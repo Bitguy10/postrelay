@@ -13,7 +13,7 @@ const sans = Inter({ subsets: ["latin"], variable: "--font-sans" });
 const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
-  title: "Cadence — schedule & auto-post to Prompted",
+  title: "PostRelay — schedule & auto-post to Prompted",
   description:
     "Free scheduling for prmpted.com: exact-time posts and drip queues that fire themselves, on Vercel + Upstash free tiers.",
 };

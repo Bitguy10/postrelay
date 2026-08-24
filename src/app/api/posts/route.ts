@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
       const nb = b.schedule.newBatch;
       if (!nb.timeOfDay?.match(/^\d{2}:\d{2}$/) || !(nb.intervalDays >= 1)) {
         return NextResponse.json(
-          { error: "Cadence needs an interval (days) and a time of day" },
+          { error: "A cadence needs an interval (days) and a time of day" },
           { status: 400 },
         );
       }
