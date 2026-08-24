@@ -7,9 +7,9 @@ import { Spinner } from "./ui";
 
 // Media uploads go browser → Prompted's Supabase storage directly (the server
 // hands back a one-shot ticket), so there's no Vercel request-size cap in the
-// path. 200MB ceiling; Prompted's own Supabase plan is the only other limit,
-// and its rejections surface as a clear error message.
-const MAX_BYTES = 200 * 1024 * 1024;
+// path. Cap = 50MB, matching Prompted's Supabase storage plan limit, so
+// users get a clear in-app message instead of a storage rejection.
+const MAX_BYTES = 50 * 1024 * 1024;
 
 /** Upload with live progress (large files can take minutes on slow links). */
 function uploadWithProgress(
