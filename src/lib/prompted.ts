@@ -75,6 +75,49 @@ export function extractUser(
 }
 
 /**
+ * Sign in with email + password (Supabase password grant). Returns an
+ * INDEPENDENT session — separate refresh-token family from the user's open
+ * prmpted.com browser tab, so the two can never invalidate each other.
+ * This is what makes reconnects self-healing.
+ */
+export async function signInWithPassword(
+  email: string,
+  password: string,
+): Promise<
+  | { ok: true; session: PromptedSession }
+  | { ok: false; error: string }
+> {
+  try {
+    const res = await fetch(
+      `${PROMPTED_SUPABASE_URL}/auth/v1/token?grant_type=password`,
+      {
+        method: "POST",
+        headers: { ...baseHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+        cache: "no-store",
+      },
+    );
+    if (!res.ok) {
+      const body = await readError(res).catch(() => `HTTP ${res.status}`);
+      return {
+        ok: false,
+        error:
+          res.status === 400 || res.status === 401
+            ? `Invalid email or password (${body})`
+            : body,
+      };
+    }
+    const session = (await res.json()) as PromptedSession;
+    if (!session.access_token || !session.refresh_token || !session.user?.id) {
+      return { ok: false, error: "Malformed sign-in response" };
+    }
+    return { ok: true, session };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "network error" };
+  }
+}
+
+/**
  * Refresh a session. Supabase ROTATES the refresh token on every call,
  * so the caller must persist both new tokens.
  */

@@ -4,8 +4,18 @@ Free scheduling & auto-posting for [Prompted](https://prmpted.com). No accounts,
 no always-on backend: Vercel serverless functions + Upstash Redis (free tiers)
 + a cron-job.org ping every 5 minutes.
 
-Connect your Prompted account by pasting the `prompted-auth` Supabase session
-from your browser's Local Storage. Compose posts with every field Prompted's
+Connect your Prompted account two ways:
+
+- **Email & password** (recommended) — PostRelay signs in server-side via
+  Supabase's password grant, minting an **independent session** that the
+  user's open prmpted.com tab can never invalidate (Supabase rotates refresh
+  tokens, so two clients sharing one session eventually conflict). The
+  password is stored AES-256-GCM encrypted and enables **self-healing**:
+  if the session is ever lost, PostRelay silently signs in again.
+- **Paste token** — for Google-login accounts (no password exists, and
+  Prompted's Supabase OAuth allowlist only permits their own domains, so a
+  third-party Google flow isn't possible). Paste the `prompted-auth` session
+  from Local Storage; re-paste if it ever goes stale. Compose posts with every field Prompted's
 own composer has — Build, Discussion, Video, Question — then fire them at an
 exact time or drip a whole batch on a cadence. A protected cron endpoint checks
 for due posts, refreshes your token when needed, and posts via Prompted's own

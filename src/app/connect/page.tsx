@@ -32,6 +32,9 @@ function StepNum({ n, done }: { n: number; done?: boolean }) {
 export default function ConnectPage() {
   const { data: session, refresh } = useApi<SessionStatus>("/api/session");
   const [pasted, setPasted] = useState("");
+  const [connectMode, setConnectMode] = useState<"password" | "token">("password");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [connectedAs, setConnectedAs] = useState<string | null>(null);
@@ -67,18 +70,17 @@ export default function ConnectPage() {
     setBusy(true);
     setError(null);
     try {
+      const body =
+        connectMode === "password"
+          ? { email: email.trim(), password, timezone: tzOverride ?? detectedTz }
+          : { sessionJson: pasted, timezone: tzOverride ?? detectedTz };
       const res = await api<{ connected: true; username: string }>(
         "/api/session",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            sessionJson: pasted,
-            timezone: tzOverride ?? detectedTz,
-          }),
-        },
+        { method: "POST", body: JSON.stringify(body) },
       );
       setConnectedAs(res.username);
       setPasted("");
+      setPassword("");
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Connection failed");
@@ -215,15 +217,70 @@ export default function ConnectPage() {
       <div className="card mt-4 p-4">
         <div className="flex items-center gap-3">
           <StepNum n={2} done={showDone} />
-          <h2 className="text-sm font-semibold text-cream">Paste & verify</h2>
+          <h2 className="text-sm font-semibold text-cream">Connect</h2>
         </div>
-        <textarea
-          value={pasted}
-          onChange={(e) => setPasted(e.target.value)}
-          spellCheck={false}
-          placeholder={`{"access_token":"eyJ…","refresh_token":"…","expires_at":…,"user":{…}}`}
-          className="field mt-3 min-h-[110px] font-mono text-[11px] leading-relaxed"
-        />
+
+        {/* two routes: password (self-healing) or token paste (Google accounts) */}
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          {(
+            [
+              ["password", "Email & password"],
+              ["token", "Paste session token"],
+            ] as const
+          ).map(([m, label]) => (
+            <button
+              key={m}
+              onClick={() => setConnectMode(m)}
+              className={`rounded-xl border px-3 py-2 text-[13px] transition-colors ${
+                connectMode === m
+                  ? "border-gold/60 bg-gold/10 text-gold"
+                  : "border-line text-muted hover:text-cream"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {connectMode === "password" ? (
+          <div className="mt-3 space-y-2.5">
+            <input
+              className="field"
+              type="email"
+              autoComplete="username"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="your prmpted.com email"
+            />
+            <input
+              className="field"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="password"
+            />
+            <p className="font-mono text-[10px] leading-relaxed text-muted/60">
+              PostRelay signs in with its own independent session — your browser
+              stays separate and neither can log the other out. Encrypted at
+              rest; enables automatic re-sign-in if the session is ever lost.
+            </p>
+          </div>
+        ) : (
+          <>
+            <p className="mt-3 font-mono text-[10px] leading-relaxed text-muted/60">
+              for accounts that sign in with Google — copy the prompted-auth
+              session from Local Storage (step 1)
+            </p>
+            <textarea
+              value={pasted}
+              onChange={(e) => setPasted(e.target.value)}
+              spellCheck={false}
+              placeholder={`{"access_token":"eyJ…","refresh_token":"…","expires_at":…,"user":{…}}`}
+              className="field mt-2 min-h-[110px] font-mono text-[11px] leading-relaxed"
+            />
+          </>
+        )}
 
         {parsed && (
           <div className="mt-3 flex flex-wrap gap-1.5">
@@ -254,13 +311,20 @@ export default function ConnectPage() {
 
         <Pill
           className="mt-4 w-full"
-          disabled={busy || !parsed?.ok}
+          disabled={
+            busy ||
+            (connectMode === "password"
+              ? !email.trim() || !password
+              : !parsed?.ok)
+          }
           onClick={connect}
         >
           {busy ? (
             <>
               <Spinner /> Verifying against Prompted…
             </>
+          ) : connectMode === "password" ? (
+            "Sign in & connect"
           ) : (
             "Verify & connect"
           )}
@@ -308,6 +372,11 @@ export default function ConnectPage() {
                 {session?.email && (
                   <p className="font-mono text-[10px] text-muted">{session.email}</p>
                 )}
+                <p className="font-mono text-[10px] text-muted/80">
+                  {session?.authMode === "password"
+                    ? "independent session · self-healing"
+                    : "pasted token · re-paste if it goes stale"}
+                </p>
               </div>
             </div>
             <p className="mt-3 text-xs leading-relaxed text-muted">

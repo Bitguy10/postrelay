@@ -119,6 +119,14 @@ export interface SessionRecord {
   needsReconnect: boolean;
   connectedAt: string;
   refreshedAt?: string;
+  /**
+   * Email+password connect: the password, separately AES-256-GCM encrypted.
+   * Present only for password-mode connections — enables self-healing
+   * (re-sign-in when the refresh token is ever invalidated).
+   */
+  passwordEnc?: string;
+  /** How this account connected: independent password session vs pasted token. */
+  authMode?: "password" | "token";
 }
 
 export interface Refs {

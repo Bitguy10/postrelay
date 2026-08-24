@@ -68,6 +68,8 @@ export interface SessionStatus {
   lastTickAt: string | null;
   /** True when a heartbeat exists but is >10 min old — cron isn't reaching us. */
   heartbeatStale: boolean;
+  /** "password" = independent self-healing session; "token" = pasted. */
+  authMode: "password" | "token" | null;
   config: { redis: boolean; encryptionKey: boolean; cronSecret: boolean };
 }
 

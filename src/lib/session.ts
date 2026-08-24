@@ -10,7 +10,12 @@ import {
   saveSessionRecord,
   saveRefs,
 } from "./data";
-import { refreshSession, verifyToken } from "./prompted";
+import {
+  extractUser,
+  refreshSession,
+  signInWithPassword,
+  verifyToken,
+} from "./prompted";
 import { PromptedSession, SessionRecord } from "./types";
 import { isValidZone, MIN } from "./time";
 
@@ -40,9 +45,41 @@ export async function connectSession(
     ...tz,
     needsReconnect: false,
     connectedAt: new Date().toISOString(),
+    authMode: "token",
   };
   await saveSessionRecord(rec);
   return { ok: true, username: verification.user.username ?? "you" };
+}
+
+/**
+ * Connect by signing in directly with email + password. This mints an
+ * INDEPENDENT Supabase session (its own refresh-token family) that the
+ * user's open prmpted.com tab can never invalidate — and stores the
+ * password encrypted so PostRelay can re-sign-in itself if the session is
+ * ever lost. The password is never returned by any API after this.
+ */
+export async function connectWithPassword(
+  email: string,
+  password: string,
+  timezone?: string,
+): Promise<{ ok: true; username: string } | { ok: false; error: string }> {
+  if (!email || !password) {
+    return { ok: false, error: "Email and password are required" };
+  }
+  const signedIn = await signInWithPassword(email.trim(), password);
+  if (!signedIn.ok) return { ok: false, error: signedIn.error };
+  const tz = safeZone(timezone);
+  const rec: SessionRecord = {
+    enc: encryptJSON(signedIn.session),
+    user: extractUser(signedIn.session.user),
+    ...tz,
+    needsReconnect: false,
+    connectedAt: new Date().toISOString(),
+    passwordEnc: encryptJSON(password),
+    authMode: "password",
+  };
+  await saveSessionRecord(rec);
+  return { ok: true, username: rec.user.username ?? "you" };
 }
 
 export interface TimezoneChange {
@@ -126,7 +163,9 @@ export interface TokenResult {
 export async function getFreshAccessToken(): Promise<TokenResult> {
   const rec = await getSessionRecord();
   if (!rec) return { ok: false, error: "No connected Prompted account" };
-  if (rec.needsReconnect) {
+  // Token-mode connections that went stale need a manual re-paste.
+  // Password-mode connections self-heal below instead.
+  if (rec.needsReconnect && !rec.passwordEnc) {
     return { ok: false, error: "Session stale — reconnect required" };
   }
 
@@ -137,25 +176,55 @@ export async function getFreshAccessToken(): Promise<TokenResult> {
     return { ok: false, error: "Stored session could not be decrypted" };
   }
 
-  const expiresAtMs = session.expires_at
-    ? session.expires_at * 1000
-    : 0;
+  const expiresAtMs = session.expires_at ? session.expires_at * 1000 : 0;
   const needsRefresh =
     !expiresAtMs || expiresAtMs - Date.now() < REFRESH_BUFFER_MIN * MIN;
+  // A stale password-mode record heals proactively even if the token still
+  // looks valid — clears the reconnect flag on the next cron touch.
+  const mustHeal = rec.needsReconnect && Boolean(rec.passwordEnc);
 
-  if (!needsRefresh) return { ok: true, accessToken: session.access_token };
-
-  const refreshed = await refreshSession(session.refresh_token);
-  if (!refreshed.ok) {
-    await setNeedsReconnect(true);
-    return { ok: false, error: refreshed.error };
+  if (needsRefresh || mustHeal) {
+    if (needsRefresh) {
+      const refreshed = await refreshSession(session.refresh_token);
+      if (refreshed.ok) {
+        session = refreshed.session;
+      } else if (!rec.passwordEnc) {
+        await setNeedsReconnect(true);
+        return { ok: false, error: refreshed.error };
+      } else {
+        // Self-healing: mint a brand-new independent session instead of
+        // failing (covers rotation conflicts, forced logouts, stale flags).
+        let password: string;
+        try {
+          password = decryptJSON<string>(rec.passwordEnc);
+        } catch {
+          await setNeedsReconnect(true);
+          return { ok: false, error: "Stored credentials could not be decrypted" };
+        }
+        const signedIn = await signInWithPassword(
+          rec.user.email ?? "",
+          password,
+        );
+        if (!signedIn.ok) {
+          await setNeedsReconnect(true);
+          return {
+            ok: false,
+            error: `Sign-in failed (${signedIn.error}) — password changed?`,
+          };
+        }
+        session = signedIn.session;
+      }
+    }
+    // Persist whichever session we now have (rotating BOTH tokens — Supabase
+    // invalidates the previous refresh token on each issue).
+    rec.enc = encryptJSON(session);
+    rec.refreshedAt = new Date().toISOString();
+    rec.needsReconnect = false;
+    await saveSessionRecord(rec);
+    return { ok: true, accessToken: session.access_token };
   }
 
-  // Rotate BOTH tokens in storage (Supabase invalidates the old refresh token).
-  rec.enc = encryptJSON(refreshed.session);
-  rec.refreshedAt = new Date().toISOString();
-  await saveSessionRecord(rec);
-  return { ok: true, accessToken: refreshed.session.access_token };
+  return { ok: true, accessToken: session.access_token };
 }
 
 /** Daily reference-data sync (categories / ai_tools / communities) into Redis. */

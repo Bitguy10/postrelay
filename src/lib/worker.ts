@@ -172,10 +172,11 @@ export async function runTick(): Promise<TickSummary> {
       lockedAt: new Date().toISOString(),
     });
 
-    // Auth precheck — if there's no usable session, don't burn attempts;
-    // the reconnect banner is already asking the user to fix it.
+    // Auth precheck — token-mode connections with a stale flag hold posts
+    // until reconnected; password-mode connections are allowed through so
+    // getFreshAccessToken can self-heal by re-signing in.
     const record = await getSessionRecord();
-    if (!record || record.needsReconnect) {
+    if (!record || (record.needsReconnect && !record.passwordEnc)) {
       await savePost({ ...post, status: "queued", lockedAt: null });
       summary.skipped++;
       summary.errors.push("no connected session — posts held until reconnect");

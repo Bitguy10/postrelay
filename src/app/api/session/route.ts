@@ -4,7 +4,7 @@ import {
   getHeartbeat,
   getSessionRecord,
 } from "@/lib/data";
-import { changeTimezone, connectSession } from "@/lib/session";
+import { changeTimezone, connectSession, connectWithPassword } from "@/lib/session";
 import { parsePastedSession } from "@/lib/validate";
 import { cronSecret, encryptionKeySecret, redisConfigured } from "@/lib/env";
 import { isValidZone, zoneAbbr, MIN } from "@/lib/time";
@@ -33,6 +33,8 @@ export async function GET() {
       timezone,
       tzAbbr: timezone ? zoneAbbr(timezone) : null,
       tzFallback: rec ? rec.tzFallback || !valid : false,
+      /** "password" = independent self-healing session; "token" = pasted. */
+      authMode: rec?.authMode ?? null,
       lastTickAt: heartbeat,
       // stale only counts once a heartbeat exists (cron worked before)
       heartbeatStale:
@@ -48,19 +50,54 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  let body: { sessionJson?: string; timezone?: string };
+  let body: {
+    sessionJson?: string;
+    email?: string;
+    password?: string;
+    timezone?: string;
+  };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
-  if (!body.sessionJson) {
-    return NextResponse.json({ error: "sessionJson is required" }, { status: 400 });
-  }
   if (!encryptionKeySecret()) {
     return NextResponse.json(
       { error: "POSTRELAY_ENCRYPTION_KEY is not set — cannot encrypt your session" },
       { status: 500 },
+    );
+  }
+  // Route 1 — email + password: mints an independent, self-healing session.
+  if (body.email || body.password) {
+    if (!body.email || !body.password) {
+      return NextResponse.json(
+        { error: "Both email and password are required" },
+        { status: 400 },
+      );
+    }
+    const result = await connectWithPassword(
+      body.email,
+      body.password,
+      body.timezone,
+    );
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: 401 });
+    }
+    const tz1 = isValidZone(body.timezone) ? body.timezone : "UTC";
+    return NextResponse.json({
+      connected: true,
+      username: result.username,
+      authMode: "password",
+      timezone: tz1,
+      tzFallback: !isValidZone(body.timezone) && Boolean(body.timezone),
+    });
+  }
+
+  // Route 2 — paste the prompted-auth session (works for Google accounts too).
+  if (!body.sessionJson) {
+    return NextResponse.json(
+      { error: "Provide either email+password or sessionJson" },
+      { status: 400 },
     );
   }
   const parsed = parsePastedSession(body.sessionJson);
@@ -76,6 +113,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     connected: true,
     username: result.username,
+    authMode: "token",
     timezone: tz,
     tzFallback: !isValidZone(body.timezone) && Boolean(body.timezone),
   });
