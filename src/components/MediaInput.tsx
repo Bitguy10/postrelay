@@ -7,9 +7,39 @@ import { Spinner } from "./ui";
 
 // Media uploads go browser → Prompted's Supabase storage directly (the server
 // hands back a one-shot ticket), so there's no Vercel request-size cap in the
-// path. 100MB ceiling; Prompted's own storage plan may cap lower, which
-// surfaces as a clear error message.
-const MAX_BYTES = 100 * 1024 * 1024;
+// path. 200MB ceiling; Prompted's own Supabase plan is the only other limit,
+// and its rejections surface as a clear error message.
+const MAX_BYTES = 200 * 1024 * 1024;
+
+/** Upload with live progress (large files can take minutes on slow links). */
+function uploadWithProgress(
+  url: string,
+  body: File,
+  headers: Record<string, string>,
+  onProgress: (pct: number) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+    for (const [k, v] of Object.entries(headers)) xhr.setRequestHeader(k, v);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) return resolve();
+      const detail = (xhr.responseText || "").slice(0, 180);
+      reject(
+        new Error(
+          xhr.status === 401 || xhr.status === 403
+            ? `Prompted rejected the upload (${xhr.status}) — your session may need reconnecting.`
+            : `Prompted's storage rejected the file (${xhr.status}): ${detail}`,
+        ),
+      );
+    };
+    xhr.onerror = () => reject(new Error("Network error during upload"));
+    xhr.send(body);
+  });
+}
 
 interface UploadTicket {
   supabaseUrl: string;
@@ -45,6 +75,7 @@ export default function MediaInput({
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const [pct, setPct] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [url, setUrl] = useState("");
 
@@ -63,6 +94,7 @@ export default function MediaInput({
       return;
     }
     setBusy(true);
+    setPct(0);
     try {
       const kind = kindOf(file.type, file.name);
       const ticket = await api<UploadTicket>("/api/upload-ticket", {
@@ -73,28 +105,17 @@ export default function MediaInput({
       const bucket = kind === "video" ? "post-videos" : "post-images";
       const path = `${ticket.userId}/${Date.now()}-${rand}.${ext}`;
 
-      const res = await fetch(
+      await uploadWithProgress(
         `${ticket.supabaseUrl}/storage/v1/object/${bucket}/${path}`,
+        file,
         {
-          method: "POST",
-          headers: {
-            apikey: ticket.anonKey,
-            Authorization: `Bearer ${ticket.accessToken}`,
-            "Content-Type": file.type || "application/octet-stream",
-            "x-upsert": "false",
-          },
-          body: file,
+          apikey: ticket.anonKey,
+          Authorization: `Bearer ${ticket.accessToken}`,
+          "Content-Type": file.type || "application/octet-stream",
+          "x-upsert": "false",
         },
+        setPct,
       );
-      if (!res.ok) {
-        const detail = (await res.text()).slice(0, 180);
-        if (res.status === 401 || res.status === 403) {
-          throw new Error(`Prompted rejected the upload (${res.status}) — your session may need reconnecting.`);
-        }
-        throw new Error(
-          `Prompted's storage rejected the file (${res.status}): ${detail}`,
-        );
-      }
       const media: MediaRef = {
         kind,
         name: file.name,
@@ -107,6 +128,7 @@ export default function MediaInput({
       setError(e instanceof Error ? e.message : "Upload failed");
     } finally {
       setBusy(false);
+      setPct(0);
       if (fileRef.current) fileRef.current.value = "";
     }
   };
@@ -154,10 +176,25 @@ export default function MediaInput({
           onClick={() => fileRef.current?.click()}
           className="rounded-full border border-dashed border-line px-4 py-2 font-mono text-[11px] uppercase tracking-wider text-muted transition-colors hover:border-gold/60 hover:text-gold disabled:opacity-50"
         >
-          {busy ? <Spinner /> : `Upload ${kinds === "video" ? "video" : "file"}`}
+          {busy ? (
+            <>
+              <Spinner /> {pct > 0 ? `${pct}%` : "starting…"}
+            </>
+          ) : (
+            `Upload ${kinds === "video" ? "video" : "file"}`
+          )}
         </button>
         {hint && <span className="font-mono text-[10px] text-muted/70">{hint}</span>}
       </div>
+
+      {busy && (
+        <div className="mt-2 h-1 overflow-hidden rounded-full bg-panel2">
+          <div
+            className="h-full rounded-full bg-gold transition-all"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      )}
 
       {allowUrl && (
         <div className="mt-2 flex gap-2">
