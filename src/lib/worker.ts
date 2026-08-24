@@ -1,13 +1,12 @@
 import crypto from "crypto";
-import {
-  ActivityEntry,
-  Post,
-} from "./types";
+import { ActivityEntry, Post, UserRecord } from "./types";
 import {
   addActivity,
+  getAllUserIds,
   getPosts,
-  getSessionRecord,
   getPost,
+  getPasswordEnc,
+  getUserRecord,
   savePost,
   touchHeartbeat,
 } from "./data";
@@ -17,21 +16,21 @@ import { MIN } from "./time";
 
 // Cron worker — runs on each 5-minute ping to /api/cron/tick.
 //
-// 1. Opportunistically refresh the reference-data cache (daily is enough).
-// 2. Find due posts and fire them: refresh token if within the 10-minute
-//    expiry buffer → submit via Prompted's PostgREST API → log the attempt.
-// 3. Failures retry with backoff (5 min, then 10 min), max 3 attempts before
-//    "failed". Auth failures flag the account as needing reconnection.
-// 4. Idempotency: a post is only ever picked up while its status is "queued"
-//    (plus a stale-lock recovery path), so overlapping cron runs can't
-//    double-fire.
+// 1. Heartbeat + opportunistic global reference-data refresh (daily).
+// 2. For EVERY connected account: find that account's due posts and fire
+//    them (refresh/heal its token first, submit via Prompted's PostgREST
+//    API, log every attempt). Each account's queue is fully isolated.
+// 3. Failures retry with backoff (5 min, then 10 min), max 3 attempts.
+// 4. Idempotency: a post is only picked up while "queued" (plus stale-lock
+//    recovery), so overlapping cron runs can't double-fire.
 
 const MAX_ATTEMPTS = 3;
 const STALE_LOCK_MIN = 10;
-const MAX_PER_RUN = 5;
+const MAX_PER_USER = 5;
 
 export interface TickSummary {
   ranAt: string;
+  accounts: number;
   due: number;
   posted: number;
   retrying: number;
@@ -41,8 +40,8 @@ export interface TickSummary {
   errors: string[];
 }
 
-function log(entry: Omit<ActivityEntry, "id" | "at">) {
-  return addActivity({
+function log(userId: string, entry: Omit<ActivityEntry, "id" | "at">) {
+  return addActivity(userId, {
     ...entry,
     id: crypto.randomUUID(),
     at: new Date().toISOString(),
@@ -61,7 +60,6 @@ function isDue(post: Post, now: number): boolean {
       !post.nextRetryAt || new Date(post.nextRetryAt).getTime() <= now;
     return fireAt <= now && retryOk;
   }
-  // Recover posts stuck in_progress by a crashed/overlapped run.
   if (post.status === "in_progress" && post.lockedAt) {
     return now - new Date(post.lockedAt).getTime() > STALE_LOCK_MIN * MIN;
   }
@@ -69,6 +67,7 @@ function isDue(post: Post, now: number): boolean {
 }
 
 async function failAttempt(
+  userId: string,
   post: Post,
   reason: string,
   authFailure: boolean,
@@ -76,7 +75,7 @@ async function failAttempt(
   const attempts = post.attempts + 1;
   const title = post.title || `(${post.type} post)`;
   if (attempts >= MAX_ATTEMPTS) {
-    await savePost({
+    await savePost(userId, {
       ...post,
       status: "failed",
       attempts,
@@ -84,8 +83,8 @@ async function failAttempt(
       nextRetryAt: null,
       lockedAt: null,
     });
-    if (authFailure) await setNeedsReconnect(true);
-    await log({
+    if (authFailure) await setNeedsReconnect(userId, true);
+    await log(userId, {
       postId: post.id,
       postType: post.type,
       title,
@@ -97,7 +96,7 @@ async function failAttempt(
     return "failed";
   }
   const nextRetryAt = new Date(Date.now() + backoffMs(attempts)).toISOString();
-  await savePost({
+  await savePost(userId, {
     ...post,
     status: "queued",
     attempts,
@@ -105,7 +104,7 @@ async function failAttempt(
     nextRetryAt,
     lockedAt: null,
   });
-  await log({
+  await log(userId, {
     postId: post.id,
     postType: post.type,
     title,
@@ -117,10 +116,91 @@ async function failAttempt(
   return "retrying";
 }
 
+async function runForUser(user: UserRecord, summary: TickSummary): Promise<void> {
+  const uid = user.id;
+  const posts = await getPosts(uid);
+  const due = posts
+    .filter((p) => isDue(p, Date.now()))
+    .sort((a, b) => (a.fireAt < b.fireAt ? -1 : 1))
+    .slice(0, MAX_PER_USER);
+  summary.due += due.length;
+
+  for (const candidate of due) {
+    // Idempotency gate: re-read; only fire if still queued (or stale-locked).
+    const post = await getPost(uid, candidate.id);
+    if (!post || !isDue(post, Date.now())) {
+      summary.skipped++;
+      continue;
+    }
+
+    // Claim the post.
+    await savePost(uid, {
+      ...post,
+      status: "in_progress",
+      lockedAt: new Date().toISOString(),
+    });
+
+    // Auth precheck — token-mode accounts with a stale flag hold posts;
+    // password-mode accounts pass through so getFreshAccessToken can heal.
+    const pwdEnc = await getPasswordEnc(uid);
+    if (!pwdEnc && user.needsReconnect) {
+      await savePost(uid, { ...post, status: "queued", lockedAt: null });
+      summary.skipped++;
+      summary.errors.push(`${user.username}: session stale — held until reconnect`);
+      continue;
+    }
+
+    const token = await getFreshAccessToken(uid);
+    if (!token.ok || !token.accessToken) {
+      const outcome = await failAttempt(uid, post, token.error ?? "auth", true);
+      summary[outcome]++;
+      continue;
+    }
+
+    try {
+      const result = await submitPost(post, uid, token.accessToken);
+      if (result.ok) {
+        await savePost(uid, {
+          ...post,
+          status: "posted",
+          postedAt: new Date().toISOString(),
+          attempts: post.attempts + 1,
+          lastError: null,
+          nextRetryAt: null,
+          lockedAt: null,
+          promptedPostId: result.postId ?? null,
+        });
+        await log(uid, {
+          postId: post.id,
+          postType: post.type,
+          title: post.title || `(${post.type} post)`,
+          status: "posted",
+          attempts: post.attempts + 1,
+        });
+        summary.posted++;
+      } else {
+        const outcome = await failAttempt(
+          uid,
+          post,
+          result.error ?? "unknown error",
+          Boolean(result.authFailed),
+        );
+        summary[outcome]++;
+      }
+    } catch (e) {
+      const outcome = await failAttempt(
+        uid,
+        post,
+        e instanceof Error ? e.message : "network error",
+        false,
+      );
+      summary[outcome]++;
+    }
+  }
+}
+
 export async function runTick(): Promise<TickSummary> {
-  const now = Date.now();
   // Heartbeat first: even a no-op tick proves cron-job.org is reaching us.
-  // If this timestamp ever goes stale, the UI raises the alarm.
   try {
     await touchHeartbeat();
   } catch {
@@ -128,6 +208,7 @@ export async function runTick(): Promise<TickSummary> {
   }
   const summary: TickSummary = {
     ranAt: new Date().toISOString(),
+    accounts: 0,
     due: 0,
     posted: 0,
     retrying: 0,
@@ -148,84 +229,19 @@ export async function runTick(): Promise<TickSummary> {
     summary.errors.push(`refs: ${e instanceof Error ? e.message : "unknown"}`);
   }
 
-  const allPosts = await getPosts();
-  const due = allPosts
-    .filter((p) => isDue(p, now))
-    .sort((a, b) => (a.fireAt < b.fireAt ? -1 : 1))
-    .slice(0, MAX_PER_RUN);
-  summary.due = due.length;
-
-  for (const candidate of due) {
-    // Idempotency gate: re-read the post; only fire if still queued (or a
-    // stale in_progress lock). An overlapping run that already grabbed it
-    // leaves status "in_progress" with a fresh lock, so we skip.
-    const post = await getPost(candidate.id);
-    if (!post || !isDue(post, Date.now())) {
-      summary.skipped++;
-      continue;
-    }
-
-    // Claim the post.
-    await savePost({
-      ...post,
-      status: "in_progress",
-      lockedAt: new Date().toISOString(),
-    });
-
-    // Auth precheck — token-mode connections with a stale flag hold posts
-    // until reconnected; password-mode connections are allowed through so
-    // getFreshAccessToken can self-heal by re-signing in.
-    const record = await getSessionRecord();
-    if (!record || (record.needsReconnect && !record.passwordEnc)) {
-      await savePost({ ...post, status: "queued", lockedAt: null });
-      summary.skipped++;
-      summary.errors.push("no connected session — posts held until reconnect");
-      continue;
-    }
-
-    const token = await getFreshAccessToken();
-    if (!token.ok || !token.accessToken) {
-      const outcome = await failAttempt(post, token.error ?? "auth", true);
-      summary[outcome]++;
-      continue;
-    }
-
+  // Fan out over every connected account — each queue is isolated.
+  for (const uid of await getAllUserIds()) {
+    const user = await getUserRecord(uid);
+    if (!user) continue;
+    const enc = await getPasswordEnc(uid);
+    if (!enc && user.needsReconnect) continue; // stale token account, nothing to do
+    summary.accounts++;
     try {
-      const result = await submitPost(post, record.user.id, token.accessToken);
-      if (result.ok) {
-        await savePost({
-          ...post,
-          status: "posted",
-          postedAt: new Date().toISOString(),
-          attempts: post.attempts + 1,
-          lastError: null,
-          nextRetryAt: null,
-          lockedAt: null,
-          promptedPostId: result.postId ?? null,
-        });
-        await log({
-          postId: post.id,
-          postType: post.type,
-          title: post.title || `(${post.type} post)`,
-          status: "posted",
-          attempts: post.attempts + 1,
-        });
-        summary.posted++;
-      } else {
-        const outcome = await failAttempt(
-          post,
-          result.error ?? "unknown error",
-          Boolean(result.authFailed),
-        );
-        summary[outcome]++;
-      }
+      await runForUser(user, summary);
     } catch (e) {
-      const outcome = await failAttempt(
-        post,
-        e instanceof Error ? e.message : "network error",
-        false,
+      summary.errors.push(
+        `${user.username}: ${e instanceof Error ? e.message : "unknown"}`,
       );
-      summary[outcome]++;
     }
   }
 

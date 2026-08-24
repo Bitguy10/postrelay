@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getBatches, getPosts, saveBatch, savePost } from "@/lib/data";
+import { currentUser } from "@/lib/user";
 import { computeNextSlot } from "@/lib/scheduler";
 import { requiredMissing } from "@/lib/validate";
 import { isValidZone } from "@/lib/time";
@@ -10,8 +11,10 @@ export const dynamic = "force-dynamic";
 
 const TYPES: PostType[] = ["build", "discussion", "video", "question"];
 
-export async function GET() {
-  const [posts, batches] = await Promise.all([getPosts(), getBatches()]);
+export async function GET(req: NextRequest) {
+  const user = await currentUser(req);
+  if (!user) return NextResponse.json({ posts: [], batches: [] }, { headers: { "Cache-Control": "no-store" } });
+  const [posts, batches] = await Promise.all([getPosts(user.id), getBatches(user.id)]);
   return NextResponse.json(
     { posts, batches },
     { headers: { "Cache-Control": "no-store" } },
@@ -57,7 +60,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unknown post type" }, { status: 400 });
   }
 
-  const posts = await getPosts();
+  const user = await currentUser(req);
+  if (!user) {
+    return NextResponse.json(
+      { error: "No account connected on this device — connect first" },
+      { status: 401 },
+    );
+  }
+  const uid = user.id;
+  const posts = await getPosts(uid);
 
   // Resolve fire time / batch
   let fireAt: string;
@@ -65,7 +76,7 @@ export async function POST(req: NextRequest) {
   if (b.schedule?.mode === "drip") {
     let batch: Batch | null = null;
     if (b.schedule.batchId) {
-      batch = (await getBatches()).find((x) => x.id === b.schedule!.batchId) ?? null;
+      batch = (await getBatches(uid)).find((x) => x.id === b.schedule!.batchId) ?? null;
       if (!batch) {
         return NextResponse.json({ error: "Drip batch not found" }, { status: 404 });
       }
@@ -92,7 +103,7 @@ export async function POST(req: NextRequest) {
         status: "active",
         createdAt: new Date().toISOString(),
       };
-      await saveBatch(batch);
+      await saveBatch(uid, batch);
     } else {
       return NextResponse.json({ error: "Drip schedule needs a batch" }, { status: 400 });
     }
@@ -145,6 +156,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  await savePost(post);
+  await savePost(uid, post);
   return NextResponse.json({ post }, { headers: { "Cache-Control": "no-store" } });
 }

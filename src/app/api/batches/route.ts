@@ -4,11 +4,14 @@ import { getBatches, getPosts, saveBatch } from "@/lib/data";
 import { computeNextSlot } from "@/lib/scheduler";
 import { isValidZone } from "@/lib/time";
 import { Batch } from "@/lib/types";
+import { currentUser } from "@/lib/user";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  const [batches, posts] = await Promise.all([getBatches(), getPosts()]);
+export async function GET(req: NextRequest) {
+  const user = await currentUser(req);
+  if (!user) return NextResponse.json({ batches: [] }, { headers: { "Cache-Control": "no-store" } });
+  const [batches, posts] = await Promise.all([getBatches(user.id), getPosts(user.id)]);
   const enriched = batches.map((b) => {
     const mine = posts.filter((p) => p.batchId === b.id && p.status !== "draft");
     return {
@@ -57,6 +60,14 @@ export async function POST(req: NextRequest) {
   if (!b.timeOfDay?.match(/^\d{2}:\d{2}$/)) {
     return NextResponse.json({ error: "Time of day must be HH:mm" }, { status: 400 });
   }
+  const user = await currentUser(req);
+  if (!user) {
+    return NextResponse.json(
+      { error: "No account connected on this device — connect first" },
+      { status: 401 },
+    );
+  }
+  const uid = user.id;
   const batch: Batch = {
     id: crypto.randomUUID(),
     intervalDays: Math.round(b.intervalDays),
@@ -65,6 +76,6 @@ export async function POST(req: NextRequest) {
     status: "active",
     createdAt: new Date().toISOString(),
   };
-  await saveBatch(batch);
+  await saveBatch(uid, batch);
   return NextResponse.json({ batch });
 }

@@ -108,10 +108,15 @@ export interface PromptedSession {
   };
 }
 
-/** What we persist — the session itself only as an AES-256-GCM ciphertext. */
-export interface SessionRecord {
-  enc: string;
-  user: PromptedUser;
+/**
+ * Per-account record (public metadata only). The encrypted session lives at
+ * pr:{id}:session and, for password-mode accounts, the encrypted password at
+ * pr:{id}:pwd — never mixed in here.
+ */
+export interface UserRecord {
+  id: string;
+  username: string;
+  email?: string;
   /** IANA zone all of this user's times are entered/displayed in. */
   timezone: string;
   /** True when a provided timezone was invalid and we fell back to UTC. */
@@ -119,12 +124,6 @@ export interface SessionRecord {
   needsReconnect: boolean;
   connectedAt: string;
   refreshedAt?: string;
-  /**
-   * Email+password connect: the password, separately AES-256-GCM encrypted.
-   * Present only for password-mode connections — enables self-healing
-   * (re-sign-in when the refresh token is ever invalidated).
-   */
-  passwordEnc?: string;
   /** How this account connected: independent password session vs pasted token. */
   authMode?: "password" | "token";
 }

@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { deletePost, getBatch, getPost, getPosts, saveBatch, savePost } from "@/lib/data";
+import { currentUser } from "@/lib/user";
 import { computeNextSlot } from "@/lib/scheduler";
 import { isValidZone } from "@/lib/time";
 import { Post } from "@/lib/types";
@@ -10,8 +11,10 @@ export const dynamic = "force-dynamic";
 
 type Ctx = { params: { id: string } };
 
-export async function GET(_req: NextRequest, { params }: Ctx) {
-  const post = await getPost(params.id);
+export async function GET(req: NextRequest, { params }: Ctx) {
+  const user = await currentUser(req);
+  if (!user) return NextResponse.json({ error: "Connect first" }, { status: 401 });
+  const post = await getPost(user.id, params.id);
   if (!post) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ post }, { headers: { "Cache-Control": "no-store" } });
 }
@@ -27,7 +30,10 @@ interface PatchBody extends Partial<Omit<Post, "id" | "createdAt">> {
 }
 
 export async function PATCH(req: NextRequest, { params }: Ctx) {
-  const existing = await getPost(params.id);
+  const user = await currentUser(req);
+  if (!user) return NextResponse.json({ error: "Connect first" }, { status: 401 });
+  const uid = user.id;
+  const existing = await getPost(uid, params.id);
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   let b: PatchBody;
@@ -71,7 +77,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       post.fireAt = new Date(s.at).toISOString();
       post.batchId = null;
     } else if (s.mode === "drip") {
-      let batch = s.batchId ? await getBatch(s.batchId) : null;
+      let batch = s.batchId ? await getBatch(uid, s.batchId) : null;
       if (!batch && s.newBatch) {
         const nb = s.newBatch;
         if (!nb.timeOfDay?.match(/^\d{2}:\d{2}$/) || !(nb.intervalDays >= 1)) {
@@ -85,12 +91,12 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
           status: "active",
           createdAt: new Date().toISOString(),
         };
-        await saveBatch(batch);
+        await saveBatch(uid, batch);
       }
       if (!batch) {
         return NextResponse.json({ error: "Drip batch not found" }, { status: 404 });
       }
-      const allPosts = await getPosts();
+      const allPosts = await getPosts(uid);
       post.batchId = batch.id;
       post.fireAt = computeNextSlot(batch, allPosts.filter((p) => p.id !== post.id)).toISOString();
     }
@@ -129,12 +135,14 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     }
   }
 
-  await savePost(post);
+  await savePost(uid, post);
   return NextResponse.json({ post }, { headers: { "Cache-Control": "no-store" } });
 }
 
-export async function DELETE(_req: NextRequest, { params }: Ctx) {
-  const post = await getPost(params.id);
+export async function DELETE(req: NextRequest, { params }: Ctx) {
+  const user = await currentUser(req);
+  if (!user) return NextResponse.json({ error: "Connect first" }, { status: 401 });
+  const post = await getPost(user.id, params.id);
   if (!post) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (post.status === "in_progress") {
     return NextResponse.json(
@@ -142,6 +150,6 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
       { status: 409 },
     );
   }
-  await deletePost(params.id);
+  await deletePost(user.id, params.id);
   return NextResponse.json({ deleted: true });
 }

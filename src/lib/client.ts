@@ -3,10 +3,32 @@
 import { useCallback, useEffect, useState } from "react";
 import { Batch, Post, ActivityEntry, Refs } from "./types";
 
+// Each browser gets a random device id (localStorage); the server maps it to
+// exactly one connected Prompted account, so every account's data is isolated.
+function deviceId(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    let id = window.localStorage.getItem("postrelay-device");
+    if (!id) {
+      id =
+        (globalThis.crypto?.randomUUID?.() ??
+          Math.random().toString(36).slice(2) + Date.now().toString(36));
+      window.localStorage.setItem("postrelay-device", id);
+    }
+    return id;
+  } catch {
+    return "";
+  }
+}
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    headers: {
+      "Content-Type": "application/json",
+      "x-postrelay-device": deviceId(),
+      ...(init?.headers ?? {}),
+    },
     cache: "no-store",
   });
   const data = await res.json().catch(() => ({}));

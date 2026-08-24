@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSessionRecord } from "@/lib/data";
+import { NextRequest, NextResponse } from "next/server";
+import { currentUser } from "@/lib/user";
 import { getFreshAccessToken } from "@/lib/session";
 import { anonKey, PROMPTED_SUPABASE_URL } from "@/lib/env";
 
@@ -16,15 +16,15 @@ export const dynamic = "force-dynamic";
  * this is no weaker than prmpted.com itself. The token still never appears in
  * logs or any other API response.
  */
-export async function POST() {
-  const rec = await getSessionRecord();
+export async function POST(req: NextRequest) {
+  const rec = await currentUser(req);
   if (!rec || rec.needsReconnect) {
     return NextResponse.json(
       { error: "Connect your Prompted account before uploading media" },
       { status: 401 },
     );
   }
-  const token = await getFreshAccessToken();
+  const token = await getFreshAccessToken(rec.id);
   if (!token.ok || !token.accessToken) {
     return NextResponse.json({ error: token.error }, { status: 401 });
   }
@@ -33,7 +33,7 @@ export async function POST() {
       supabaseUrl: PROMPTED_SUPABASE_URL,
       anonKey: anonKey(),
       accessToken: token.accessToken,
-      userId: rec.user.id,
+      userId: rec.id,
     },
     { headers: { "Cache-Control": "no-store" } },
   );

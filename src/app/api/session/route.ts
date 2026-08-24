@@ -1,42 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  clearSession,
-  getHeartbeat,
-  getSessionRecord,
-} from "@/lib/data";
+import { getHeartbeat, unbindDevice } from "@/lib/data";
 import { changeTimezone, connectSession, connectWithPassword } from "@/lib/session";
 import { parsePastedSession } from "@/lib/validate";
 import { cronSecret, encryptionKeySecret, redisConfigured } from "@/lib/env";
 import { isValidZone, zoneAbbr, MIN } from "@/lib/time";
+import { currentUser, DEVICE_HEADER } from "@/lib/user";
 
 export const dynamic = "force-dynamic";
 
-// A heartbeat older than this means cron-job.org has stopped reaching us
-// (bad URL/secret, paused job) — surfaced as a visible warning.
+// A heartbeat older than this means cron-job.org has stopped reaching us.
 const STALE_HEARTBEAT_MS = 10 * MIN;
 
-export async function GET() {
-  const rec = await getSessionRecord();
-  const stored = rec?.timezone;
-  const valid = isValidZone(stored);
-  const timezone = rec ? (valid ? stored! : "UTC") : null;
+export async function GET(req: NextRequest) {
+  const user = await currentUser(req);
   const heartbeat = await getHeartbeat();
   const lastTickMs = heartbeat ? new Date(heartbeat).getTime() : null;
+  const valid = isValidZone(user?.timezone);
+  const timezone = user ? (valid ? user.timezone : "UTC") : null;
   return NextResponse.json(
     {
-      connected: Boolean(rec),
-      username: rec?.user.username ?? null,
-      email: rec?.user.email ?? null,
-      needsReconnect: rec?.needsReconnect ?? false,
-      refreshedAt: rec?.refreshedAt ?? null,
-      connectedAt: rec?.connectedAt ?? null,
+      connected: Boolean(user),
+      username: user?.username ?? null,
+      email: user?.email ?? null,
+      needsReconnect: user?.needsReconnect ?? false,
+      refreshedAt: user?.refreshedAt ?? null,
+      connectedAt: user?.connectedAt ?? null,
       timezone,
       tzAbbr: timezone ? zoneAbbr(timezone) : null,
-      tzFallback: rec ? rec.tzFallback || !valid : false,
+      tzFallback: user ? user.tzFallback || !valid : false,
       /** "password" = independent self-healing session; "token" = pasted. */
-      authMode: rec?.authMode ?? null,
+      authMode: user?.authMode ?? null,
       lastTickAt: heartbeat,
-      // stale only counts once a heartbeat exists (cron worked before)
       heartbeatStale:
         lastTickMs !== null && Date.now() - lastTickMs > STALE_HEARTBEAT_MS,
       config: {
@@ -67,7 +61,15 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   }
-  // Route 1 — email + password: mints an independent, self-healing session.
+  const deviceId = req.headers.get(DEVICE_HEADER);
+  if (!deviceId) {
+    return NextResponse.json(
+      { error: "Missing device header — reload the app" },
+      { status: 400 },
+    );
+  }
+
+  // Route 1 — email + password: independent, self-healing session.
   if (body.email || body.password) {
     if (!body.email || !body.password) {
       return NextResponse.json(
@@ -79,6 +81,7 @@ export async function POST(req: NextRequest) {
       body.email,
       body.password,
       body.timezone,
+      deviceId,
     );
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: 401 });
@@ -104,11 +107,10 @@ export async function POST(req: NextRequest) {
   if (!parsed.ok) {
     return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
-  const result = await connectSession(parsed.session, body.timezone);
+  const result = await connectSession(parsed.session, body.timezone, deviceId);
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 401 });
   }
-  // The token is never returned — only the confirmation of who we connected as.
   const tz = isValidZone(body.timezone) ? body.timezone : "UTC";
   return NextResponse.json({
     connected: true,
@@ -119,8 +121,12 @@ export async function POST(req: NextRequest) {
   });
 }
 
-/** Change the stored timezone (optionally reinterpreting queued posts). */
+/** Change the current account's timezone (optionally reinterpreting posts). */
 export async function PATCH(req: NextRequest) {
+  const user = await currentUser(req);
+  if (!user) {
+    return NextResponse.json({ error: "No connected account" }, { status: 401 });
+  }
   let body: { timezone?: string; reinterpret?: "shift" | "keep" };
   try {
     body = await req.json();
@@ -130,7 +136,7 @@ export async function PATCH(req: NextRequest) {
   if (!body.timezone) {
     return NextResponse.json({ error: "timezone is required" }, { status: 400 });
   }
-  const result = await changeTimezone(body.timezone, body.reinterpret);
+  const result = await changeTimezone(user.id, body.timezone, body.reinterpret);
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }
@@ -144,7 +150,9 @@ export async function PATCH(req: NextRequest) {
   });
 }
 
-export async function DELETE() {
-  await clearSession();
+/** Sign this browser out — the account's queue and history stay saved. */
+export async function DELETE(req: NextRequest) {
+  const deviceId = req.headers.get(DEVICE_HEADER);
+  if (deviceId) await unbindDevice(deviceId);
   return NextResponse.json({ connected: false });
 }

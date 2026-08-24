@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getBatch, getPosts, saveBatch, savePost } from "@/lib/data";
 import { recomputeSlots } from "@/lib/scheduler";
 import { isValidZone } from "@/lib/time";
+import { currentUser } from "@/lib/user";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,10 @@ interface PatchBody {
 }
 
 export async function PATCH(req: NextRequest, { params }: Ctx) {
-  const batch = await getBatch(params.id);
+  const user = await currentUser(req);
+  if (!user) return NextResponse.json({ error: "Connect first" }, { status: 401 });
+  const uid = user.id;
+  const batch = await getBatch(uid, params.id);
   if (!batch) return NextResponse.json({ error: "Batch not found" }, { status: 404 });
 
   let b: PatchBody;
@@ -28,7 +32,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   // Pause/resume only stops future auto-assignment. Posts already in slots
   // keep firing — that's the point of "pause", not "delete the schedule".
   if (b.status === "active" || b.status === "paused") {
-    await saveBatch({ ...batch, status: b.status });
+    await saveBatch(uid, { ...batch, status: b.status });
     return NextResponse.json({ batch: { ...batch, status: b.status } });
   }
 
@@ -41,16 +45,16 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   const timezone = isValidZone(b.timezone) ? b.timezone : batch.timezone;
 
   const updated = { ...batch, intervalDays, timeOfDay, timezone };
-  await saveBatch(updated);
+  await saveBatch(uid, updated);
 
   if (
     intervalDays !== batch.intervalDays ||
     timeOfDay !== batch.timeOfDay ||
     timezone !== batch.timezone
   ) {
-    const posts = await getPosts();
+    const posts = await getPosts(uid);
     const { updated: posts2 } = recomputeSlots(updated, posts);
-    for (const p of posts2) await savePost(p);
+    for (const p of posts2) await savePost(uid, p);
   }
 
   return NextResponse.json({ batch: updated });

@@ -380,9 +380,9 @@ export default function ConnectPage() {
               </div>
             </div>
             <p className="mt-3 text-xs leading-relaxed text-muted">
-              PostRelay will refresh this token automatically before each post.
-              If it ever goes stale, you&apos;ll see one reconnect prompt —
-              nothing fails silently.
+              Each browser stays signed in to its own account — queues and
+              history are kept separate per account. Signing out keeps
+              everything saved under your account; sign back in anytime.
             </p>
             <div className="mt-4 flex gap-2">
               <Link
@@ -392,7 +392,7 @@ export default function ConnectPage() {
                 Compose a post
               </Link>
               <Pill variant="danger" onClick={disconnect}>
-                Disconnect
+                Sign out
               </Pill>
             </div>
           </div>
