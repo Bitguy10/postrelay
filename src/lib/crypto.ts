@@ -2,14 +2,14 @@ import crypto from "crypto";
 import { encryptionKeySecret } from "./env";
 
 // AES-256-GCM encryption of session tokens at rest.
-// Key: CADENCE_ENCRYPTION_KEY as 64-char hex (preferred), or any string
+// Key: POSTRELAY_ENCRYPTION_KEY as 64-char hex (preferred), or any string
 // hashed with SHA-256. Format at rest: base64(iv).base64(tag).base64(ciphertext)
 
 function getKey(): Buffer {
   const raw = encryptionKeySecret();
   if (!raw) {
     throw new Error(
-      "CADENCE_ENCRYPTION_KEY is not set — generate one with `node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"`",
+      "POSTRELAY_ENCRYPTION_KEY is not set — generate one with `node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"`",
     );
   }
   return /^[0-9a-fA-F]{64}$/.test(raw)

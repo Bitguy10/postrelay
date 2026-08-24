@@ -173,7 +173,7 @@ export default function ConnectPage() {
       )}
       {session && !session.config.encryptionKey && (
         <p className="mt-3 rounded-xl border border-bad/30 bg-bad/5 px-3.5 py-2.5 font-mono text-[11px] text-bad">
-          CADENCE_ENCRYPTION_KEY is not set — tokens can&apos;t be encrypted.
+          POSTRELAY_ENCRYPTION_KEY is not set — tokens can&apos;t be encrypted.
         </p>
       )}
 

@@ -43,7 +43,7 @@ Every time in PostRelay belongs to the connected user's own clock:
 
 ```bash
 npm install
-cp .env.example .env.local   # fill in at least CADENCE_ENCRYPTION_KEY
+cp .env.example .env.local   # fill in at least POSTRELAY_ENCRYPTION_KEY
 npm run dev                  # http://localhost:3000
 ```
 
@@ -61,10 +61,10 @@ npm run build   # runs Next's production build (types + lint)
 | Variable | Required | Purpose |
 |---|---|---|
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | prod | All persistent data (encrypted tokens, queue, batches, activity, reference cache) |
-| `CADENCE_ENCRYPTION_KEY` | prod | AES-256-GCM key (64-char hex or any string, hashed). Encrypts session tokens at rest |
+| `POSTRELAY_ENCRYPTION_KEY` | prod | AES-256-GCM key (64-char hex or any string, hashed). Encrypts session tokens at rest |
 | `CRON_SECRET` | prod | Shared secret protecting `/api/cron/tick` |
 | `PROMPTED_SUPABASE_ANON_KEY` | no | Defaults to Prompted's own public anon key (from their bundle — safe to embed) |
-| `CADENCE_MEDIA_MAX_BYTES` | no | Per-file upload cap, default 3 MB |
+| `POSTRELAY_MEDIA_MAX_BYTES` | no | Per-file upload cap, default 3 MB |
 
 ## Deploying (all free tiers)
 

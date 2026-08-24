@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
   }
   if (!encryptionKeySecret()) {
     return NextResponse.json(
-      { error: "CADENCE_ENCRYPTION_KEY is not set — cannot encrypt your session" },
+      { error: "POSTRELAY_ENCRYPTION_KEY is not set — cannot encrypt your session" },
       { status: 500 },
     );
   }

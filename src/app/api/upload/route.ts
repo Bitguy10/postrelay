@@ -10,7 +10,10 @@ export const dynamic = "force-dynamic";
 // so queues in Redis only ever hold URLs. Bytes are capped small — this is a
 // free-tier tool, not a CDN.
 
-const MAX_BYTES = parseInt(process.env.CADENCE_MEDIA_MAX_BYTES || `${3 * 1024 * 1024}`, 10);
+const MAX_BYTES = parseInt(
+  process.env.POSTRELAY_MEDIA_MAX_BYTES || process.env.CADENCE_MEDIA_MAX_BYTES || `${3 * 1024 * 1024}`,
+  10,
+);
 
 const VIDEO_EXT = /\.(mp4|webm|mov)$/i;
 

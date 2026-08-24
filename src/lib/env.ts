@@ -11,8 +11,10 @@ export const DEFAULT_ANON_KEY =
 export const anonKey = (): string =>
   process.env.PROMPTED_SUPABASE_ANON_KEY || DEFAULT_ANON_KEY;
 
+// Reads the PostRelay-era name first; falls back to the original name
+// so deployments from before the rename keep working.
 export const encryptionKeySecret = (): string =>
-  process.env.CADENCE_ENCRYPTION_KEY || "";
+  process.env.POSTRELAY_ENCRYPTION_KEY || process.env.CADENCE_ENCRYPTION_KEY || "";
 
 export const cronSecret = (): string => process.env.CRON_SECRET || "";
 
