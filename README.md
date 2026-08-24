@@ -133,9 +133,11 @@ needs reconnection, so the compose dropdowns never silently go stale.
 
 ## Free-tier limits & trade-offs
 
-- Media: uploads pass through the serverless function to Prompted's storage —
-  capped at 3 MB/file (Vercel request limits + free-tier friendliness). Larger
-  media: paste a hosted URL instead.
+- Media uploads go **browser → Prompted's Supabase storage directly** (the
+  server issues a one-shot ticket), so Vercel's 4.5MB request cap isn't in the
+  path — files up to 100MB work (Prompted's own storage plan is the only other
+  ceiling, and its errors surface clearly). Hosted URLs still work as an
+  alternative.
 - The cron checks every 5 minutes; a post scheduled at 9:00 fires by 9:05 at
   the latest (usually on the 9:00 tick).
 - Upstash free tier: 500k commands/month is comfortably more than a 5-minute

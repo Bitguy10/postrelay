@@ -483,7 +483,7 @@ export default function PostForm({
           multiple
           value={post.media}
           onChange={(media) => patch({ media })}
-          hint="at least one image or video · ≤3MB each"
+          hint="at least one image or video · up to 100MB each"
         />
       )}
       {post.type === "video" && (
@@ -495,7 +495,7 @@ export default function PostForm({
           multiple={false}
           value={post.video ? [post.video] : []}
           onChange={(items) => patch({ video: items[0] ?? null })}
-          hint=".mp4 / .webm / .mov · ≤3MB on the free tier"
+          hint=".mp4 / .webm / .mov · up to 100MB"
         />
       )}
       {(post.type === "discussion" || post.type === "question") && (

@@ -5,11 +5,22 @@ import { api } from "@/lib/client";
 import { MediaRef } from "@/lib/types";
 import { Spinner } from "./ui";
 
-const MAX_BYTES = 3 * 1024 * 1024; // matches the server cap (free-tier friendly)
+// Media uploads go browser → Prompted's Supabase storage directly (the server
+// hands back a one-shot ticket), so there's no Vercel request-size cap in the
+// path. 100MB ceiling; Prompted's own storage plan may cap lower, which
+// surfaces as a clear error message.
+const MAX_BYTES = 100 * 1024 * 1024;
+
+interface UploadTicket {
+  supabaseUrl: string;
+  anonKey: string;
+  accessToken: string;
+  userId: string;
+}
 
 /**
- * File-or-URL media input. Files upload straight into Prompted's own Supabase
- * storage (via /api/upload) at compose time, so the queue only stores URLs.
+ * File-or-URL media input. Files land in Prompted's own storage buckets
+ * (post-images / post-videos) at compose time, so the queue only stores URLs.
  */
 export default function MediaInput({
   label,
@@ -47,28 +58,53 @@ export default function MediaInput({
     setError(null);
     if (file.size > MAX_BYTES) {
       setError(
-        `${file.name} is ${(file.size / 1048576).toFixed(1)}MB — cap is 3MB. Paste a hosted URL instead.`,
+        `${file.name} is ${(file.size / 1048576).toFixed(1)}MB — cap is ${MAX_BYTES / 1048576}MB.`,
       );
       return;
     }
     setBusy(true);
     try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const r = new FileReader();
-        r.onload = () => resolve(String(r.result));
-        r.onerror = () => reject(new Error("Could not read file"));
-        r.readAsDataURL(file);
-      });
-      const res = await api<{ media: MediaRef }>("/api/upload", {
+      const kind = kindOf(file.type, file.name);
+      const ticket = await api<UploadTicket>("/api/upload-ticket", {
         method: "POST",
-        body: JSON.stringify({ name: file.name, mime: file.type, dataUrl }),
       });
-      onChange(multiple ? [...value, res.media] : [res.media]);
-    } catch (e) {
-      setError(
-        (e instanceof Error ? e.message : "Upload failed") +
-          " — you can paste a hosted URL instead.",
+      const ext = (file.name.split(".").pop() || "bin").toLowerCase();
+      const rand = Math.random().toString(36).substring(2, 8);
+      const bucket = kind === "video" ? "post-videos" : "post-images";
+      const path = `${ticket.userId}/${Date.now()}-${rand}.${ext}`;
+
+      const res = await fetch(
+        `${ticket.supabaseUrl}/storage/v1/object/${bucket}/${path}`,
+        {
+          method: "POST",
+          headers: {
+            apikey: ticket.anonKey,
+            Authorization: `Bearer ${ticket.accessToken}`,
+            "Content-Type": file.type || "application/octet-stream",
+            "x-upsert": "false",
+          },
+          body: file,
+        },
       );
+      if (!res.ok) {
+        const detail = (await res.text()).slice(0, 180);
+        if (res.status === 401 || res.status === 403) {
+          throw new Error(`Prompted rejected the upload (${res.status}) — your session may need reconnecting.`);
+        }
+        throw new Error(
+          `Prompted's storage rejected the file (${res.status}): ${detail}`,
+        );
+      }
+      const media: MediaRef = {
+        kind,
+        name: file.name,
+        mime: file.type,
+        url: `${ticket.supabaseUrl}/storage/v1/object/public/${bucket}/${path}`,
+        path,
+      };
+      onChange(multiple ? [...value, media] : [media]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Upload failed");
     } finally {
       setBusy(false);
       if (fileRef.current) fileRef.current.value = "";
