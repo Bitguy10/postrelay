@@ -38,9 +38,9 @@ export default function PostForm({
   };
 
   const readDesignDoc = (file: File) => {
-    if (file.size > 512 * 1024) {
+    if (file.size > 2 * 1024 * 1024) {
       patch({ designDoc: null });
-      alert("Design docs are capped at 512KB (they're stored as text).");
+      alert("Design docs are capped at 2MB — same as Prompted's own uploader.");
       return;
     }
     const r = new FileReader();
@@ -483,7 +483,7 @@ export default function PostForm({
           multiple
           value={post.media}
           onChange={(media) => patch({ media })}
-          hint="images up to 50MB · videos up to 100MB"
+          hint="images up to 5MB · videos up to 150MB"
         />
       )}
       {post.type === "video" && (
@@ -495,7 +495,7 @@ export default function PostForm({
           multiple={false}
           value={post.video ? [post.video] : []}
           onChange={(items) => patch({ video: items[0] ?? null })}
-          hint=".mp4 / .webm / .mov · up to 100MB"
+          hint=".mp4 / .webm / .mov · up to 150MB"
         />
       )}
       {(post.type === "discussion" || post.type === "question") && (

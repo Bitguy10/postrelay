@@ -7,11 +7,11 @@ import { Spinner } from "./ui";
 
 // Media uploads go browser → Prompted's Supabase storage directly (the server
 // hands back a one-shot ticket), so there's no Vercel request-size cap in the
-// path. Caps match Prompted's own composer limits (verified from their UI):
-// videos up to 100MB, images up to 50MB — so users get a clear in-app message
-// instead of a storage rejection after a long upload.
-const CAP_VIDEO = 100 * 1024 * 1024;
-const CAP_IMAGE = 50 * 1024 * 1024;
+// path. Caps mirror Prompted's own composer validators, extracted from
+// their bundle: post videos 150MB, post images 5MB — so users get a clear
+// in-app message instead of building a post their composer would reject.
+const CAP_VIDEO = 150 * 1024 * 1024;
+const CAP_IMAGE = 5 * 1024 * 1024;
 const capFor = (kind: MediaRef["kind"]) =>
   kind === "video" ? CAP_VIDEO : CAP_IMAGE;
 
