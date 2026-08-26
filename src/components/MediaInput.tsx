@@ -7,9 +7,13 @@ import { Spinner } from "./ui";
 
 // Media uploads go browser → Prompted's Supabase storage directly (the server
 // hands back a one-shot ticket), so there's no Vercel request-size cap in the
-// path. Cap = 50MB, matching Prompted's Supabase storage plan limit, so
-// users get a clear in-app message instead of a storage rejection.
-const MAX_BYTES = 50 * 1024 * 1024;
+// path. Caps match Prompted's own composer limits (verified from their UI):
+// videos up to 100MB, images up to 50MB — so users get a clear in-app message
+// instead of a storage rejection after a long upload.
+const CAP_VIDEO = 100 * 1024 * 1024;
+const CAP_IMAGE = 50 * 1024 * 1024;
+const capFor = (kind: MediaRef["kind"]) =>
+  kind === "video" ? CAP_VIDEO : CAP_IMAGE;
 
 /** Upload with live progress (large files can take minutes on slow links). */
 function uploadWithProgress(
@@ -87,9 +91,10 @@ export default function MediaInput({
 
   const handleFile = async (file: File) => {
     setError(null);
-    if (file.size > MAX_BYTES) {
+    const cap = capFor(kindOf(file.type, file.name));
+    if (file.size > cap) {
       setError(
-        `${file.name} is ${(file.size / 1048576).toFixed(1)}MB — cap is ${MAX_BYTES / 1048576}MB.`,
+        `${file.name} is ${(file.size / 1048576).toFixed(1)}MB — Prompted's cap is ${cap / 1048576}MB for this file type.`,
       );
       return;
     }
